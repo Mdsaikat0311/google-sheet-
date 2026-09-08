@@ -1,0 +1,7 @@
+{
+  "name": "মাই ব্যবসা ড্যাশবোর্ড",
+  "description": "",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
