@@ -13,8 +13,30 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin: 0; background-color: #0a0c13; color: #f3f4f6;">
+    <div id="root">
+      <div style="min-height: 100vh; background-color: #0a0c13; color: #f3f4f6; display: flex; align-items: center; justify-content: center; font-family: 'Hind Siliguri', sans-serif;">
+        <div style="text-align: center; max-width: 420px; padding: 28px; border: 1px solid #1f293d; border-radius: 16px; background: #121622; box-shadow: 0 20px 30px rgba(0,0,0,0.5);">
+          <div style="width: 44px; height: 44px; border: 3px solid rgba(236, 72, 153, 0.2); border-top-color: #ec4899; border-radius: 50%; margin: 0 auto 16px auto; animation: spin 1s linear infinite;"></div>
+          <h2 style="font-size: 17px; font-weight: 600; margin: 0 0 8px 0; color: #ffffff;">মাই ব্যবসা ড্যাশবোর্ড লোড হচ্ছে...</h2>
+          <p style="font-size: 13px; color: #9ca3af; margin: 0; line-height: 1.5;">অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন...</p>
+        </div>
+      </div>
+    </div>
+    <style>
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <script>
+      // Fallback redirect if GitHub Pages serves root index.html instead of docs/
+      if (window.location.hostname.includes('github.io') && !window.location.pathname.includes('/docs')) {
+        setTimeout(function() {
+          var root = document.getElementById('root');
+          if (root && root.querySelector('style, h2')) {
+            window.location.href = './docs/';
+          }
+        }, 1500);
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

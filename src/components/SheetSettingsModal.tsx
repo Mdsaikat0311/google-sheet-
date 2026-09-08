@@ -103,8 +103,10 @@ export const SheetSettingsModal: React.FC<SheetSettingsModalProps> = ({
                   গুগল শিটে সরাসরি অর্ডার পড়া ও আপডেট করতে গুগল সাইন-ইন করুন:
                 </p>
                 <GoogleSignInButton
+                  user={user}
                   onSignIn={onSignIn}
-                  isLoading={isAuthLoading}
+                  onSignOut={onSignOut}
+                  loading={isAuthLoading}
                 />
               </div>
             )}
