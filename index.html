@@ -41,10 +41,13 @@
       window.addEventListener('error', function(ev) {
         var errBox = document.getElementById('loader-error');
         if (!errBox) return;
+        var src = (ev.target && (ev.target.src || ev.target.href)) || '';
+        // Only show fatal errors, ignore intermediate fallback probes
         if (ev.target && (ev.target.tagName === 'SCRIPT' || ev.target.tagName === 'LINK')) {
-          errBox.style.display = 'block';
-          var failedUrl = ev.target.src || ev.target.href || '';
-          errBox.innerHTML = '<strong>ফাইল লোড হতে সমস্যা হয়েছে:</strong><br>' + failedUrl;
+          if (src.includes('public/assets')) {
+            errBox.style.display = 'block';
+            errBox.innerHTML = '<strong>ফাইল লোড হতে সমস্যা হয়েছে:</strong><br>' + src;
+          }
         } else if (ev.message && !ev.message.includes('ResizeObserver')) {
           errBox.style.display = 'block';
           errBox.innerText = 'Error: ' + ev.message;
@@ -54,14 +57,26 @@
     <script type="module">
       // If running on GitHub Pages or static host (not Vite dev server)
       if (window.location.hostname.includes('github.io') || (!window.location.port && !window.location.hostname.includes('run.app'))) {
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = './assets/index.css';
-        document.head.appendChild(link);
+        function loadStaticBundle(base) {
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = base + 'index.css';
+          link.onerror = function() {
+            if (base === './public/assets/') {
+              loadStaticBundle('./assets/');
+            }
+          };
+          document.head.appendChild(link);
 
-        import('./assets/index.js').catch(function(err) {
-          console.error('Failed to import bundle:', err);
-        });
+          import(base + 'index.js').catch(function() {
+            if (base === './public/assets/') {
+              import('./assets/index.js').catch(function(e) {
+                console.error('All bundle paths failed:', e);
+              });
+            }
+          });
+        }
+        loadStaticBundle('./public/assets/');
       }
     </script>
     <script type="module" src="/src/main.tsx"></script>
