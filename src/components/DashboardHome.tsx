@@ -304,7 +304,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
 
                     return (
                       <tr
-                        key={order.id || index}
+                        key={`${order.id}-${order.rowIndex ?? index}`}
                         onClick={() => onSelectOrder(order)}
                         className="hover:bg-[#181c28] transition-colors cursor-pointer group"
                       >

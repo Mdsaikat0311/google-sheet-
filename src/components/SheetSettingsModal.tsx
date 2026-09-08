@@ -23,6 +23,7 @@ interface SheetSettingsModalProps {
   isAuthLoading: boolean;
   onSyncNow: () => void;
   isSyncing: boolean;
+  onOpenAuthHelp?: () => void;
 }
 
 export const SheetSettingsModal: React.FC<SheetSettingsModalProps> = ({
@@ -36,6 +37,7 @@ export const SheetSettingsModal: React.FC<SheetSettingsModalProps> = ({
   isAuthLoading,
   onSyncNow,
   isSyncing,
+  onOpenAuthHelp,
 }) => {
   const [inputVal, setInputVal] = useState(spreadsheetId);
 
@@ -98,16 +100,30 @@ export const SheetSettingsModal: React.FC<SheetSettingsModalProps> = ({
                 </button>
               </div>
             ) : (
-              <div>
-                <p className="text-gray-400 mb-2 leading-relaxed">
-                  গুগল শিটে সরাসরি অর্ডার পড়া ও আপডেট করতে গুগল সাইন-ইন করুন:
-                </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-gray-400 leading-relaxed text-[11px]">
+                    গুগল শিটে সরাসরি অর্ডার আপডেট করতে গুগল সাইন-ইন করুন:
+                  </p>
+                  {onOpenAuthHelp && (
+                    <button
+                      onClick={onOpenAuthHelp}
+                      className="text-pink-400 hover:text-pink-300 font-semibold text-[11px] underline underline-offset-2 shrink-0 ml-2"
+                    >
+                      লগইন সমস্যা?
+                    </button>
+                  )}
+                </div>
                 <GoogleSignInButton
                   user={user}
                   onSignIn={onSignIn}
                   onSignOut={onSignOut}
                   loading={isAuthLoading}
                 />
+                <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-emerald-300 text-[11px] flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>পাবলিক শিট মোড সক্রিয়: সাইন-ইন ছাড়াও লাইভ শিট পড়া যাচ্ছে।</span>
+                </div>
               </div>
             )}
           </div>

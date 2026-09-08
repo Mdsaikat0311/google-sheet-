@@ -81,8 +81,8 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-stone-50/70 transition-colors">
+              {orders.map((order, idx) => (
+                <tr key={`${order.id}-${order.rowIndex ?? idx}`} className="hover:bg-stone-50/70 transition-colors">
                   <td className="py-3 px-4 font-mono font-medium text-stone-800">
                     {order.id}
                   </td>

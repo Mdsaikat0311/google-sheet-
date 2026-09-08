@@ -43,9 +43,13 @@ export const getSpreadsheetMetadata = async (
  */
 export const getSheetProducts = async (
   spreadsheetId: string,
-  accessToken: string,
+  accessToken?: string | null,
   sheetTabName: string = 'Products'
 ): Promise<{ products: Product[]; rawHeader: string[]; tabName: string }> => {
+  if (!accessToken) {
+    return fetchPublicSheetProducts(spreadsheetId, sheetTabName);
+  }
+
   // First, verify tab exists or find suitable tab
   let tabName = sheetTabName;
   try {
@@ -61,7 +65,8 @@ export const getSheetProducts = async (
       tabName = sheetTitles[0];
     }
   } catch (err) {
-    console.warn('Metadata check error, fallback to tab:', sheetTabName, err);
+    console.warn('Metadata check error, fallback to public products fetch:', sheetTabName, err);
+    return fetchPublicSheetProducts(spreadsheetId, sheetTabName);
   }
 
   const range = `'${tabName}'!A1:Z1000`;
@@ -75,8 +80,7 @@ export const getSheetProducts = async (
   );
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Error fetching sheet: ${res.statusText}`);
+    return fetchPublicSheetProducts(spreadsheetId, tabName);
   }
 
   const data: SheetResponse = await res.json();
@@ -390,13 +394,193 @@ export const appendSheetOrder = async (
 };
 
 /**
- * Fetch orders from user's Google Sheet dynamically detecting columns from Screenshot_20260908_151914.jpg
+ * Fetch orders using Google Sheets public Visualization API (requires no OAuth token if shared)
+ */
+export const fetchPublicSheetOrders = async (
+  spreadsheetId: string,
+  preferredTab?: string
+): Promise<{ orders: Order[]; tabName: string }> => {
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+  const tabQuery = preferredTab ? `&sheet=${encodeURIComponent(preferredTab)}` : '';
+  const url = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:json${tabQuery}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Public sheet fetch failed: ${res.statusText}`);
+  }
+  const text = await res.text();
+  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);/);
+  if (!match || !match[1]) {
+    throw new Error('Invalid public sheet response format');
+  }
+
+  const data = JSON.parse(match[1]);
+  if (!data.table || !data.table.rows) {
+    return { orders: [], tabName: preferredTab || 'Sheet1' };
+  }
+
+  const cols = data.table.cols.map((c: any) => (c?.label || c?.id || '').trim().toLowerCase());
+
+  // Find column indices
+  const invoiceCol = cols.findIndex((h: string) => /invoice|order.*id|inv|আইডি|অর্ডার.*নং|date/i.test(h));
+  const nameCol = cols.findIndex((h: string) => /customer|name|গ্রাহক|নাম/i.test(h));
+  const phoneCol = cols.findIndex((h: string) => /phone|mobile|ফোন|মোবাইল|number/i.test(h));
+  const addressCol = cols.findIndex((h: string) => /address|ঠিকানা|সিটি|city|adress/i.test(h));
+  const priceCol = cols.findIndex((h: string) => /price|amount|দাম|মূল্য|total/i.test(h));
+  const productCol = cols.findIndex((h: string) => /product|item|পণ্য/i.test(h));
+  const sourceCol = cols.findIndex((h: string) => /source|মাধ্যম|সোর্স/i.test(h));
+  const statusCol = cols.findIndex((h: string) => /status|অবস্থা/i.test(h) && !/courier/i.test(h));
+  const trackingCol = cols.findIndex((h: string) => /tracking|code|ট্র্যাকিং/i.test(h));
+  const courierCol = cols.findIndex((h: string) => /courier.*status|কুরিয়ার/i.test(h));
+  const quantityCol = cols.findIndex((h: string) => /quantity|qty|পরিমাণ/i.test(h));
+
+  const orders: Order[] = [];
+  const rawRows = data.table.rows;
+
+  for (let i = 0; i < rawRows.length; i++) {
+    const cells = rawRows[i].c;
+    if (!cells) continue;
+
+    const row = cells.map((cell: any) =>
+      cell ? (cell.f !== undefined ? String(cell.f).trim() : String(cell.v !== null ? cell.v : '').trim()) : ''
+    );
+
+    // Skip empty rows
+    if (!row.some((val: string) => val !== '')) continue;
+
+    const rawId = (invoiceCol !== -1 && row[invoiceCol]) ? row[invoiceCol] : (row[0] || '');
+    const nameVal = (nameCol !== -1 && row[nameCol]) ? row[nameCol] : (row[1] || '');
+    const phoneVal = (phoneCol !== -1 && row[phoneCol]) ? row[phoneCol] : (row[2] || '');
+    const addrVal = (addressCol !== -1 && row[addressCol]) ? row[addressCol] : (row[3] || '');
+    const prodVal = (productCol !== -1 && row[productCol]) ? row[productCol] : (row[7] || row[5] || 'পণ্য');
+    const sourceVal = (sourceCol !== -1 && row[sourceCol]) ? row[sourceCol] : (row[8] || 'Website');
+    const statusVal = (statusCol !== -1 && row[statusCol]) ? row[statusCol] : (row[9] || 'Pending');
+    const trackVal = (trackingCol !== -1 && row[trackingCol]) ? row[trackingCol] : (row[10] || '');
+    const courierVal = (courierCol !== -1 && row[courierCol]) ? row[courierCol] : (row[12] || '');
+    const qtyVal = parseInt((quantityCol !== -1 ? row[quantityCol] : row[13] || '1').replace(/[^0-9]/g, '')) || 1;
+    const priceVal = parseFloat((priceCol !== -1 ? row[priceCol] : row[4] || '0').replace(/[^0-9.]/g, '')) || 0;
+
+    // Must have at least an invoice ID, name, phone, or tracking code
+    if (!rawId && !nameVal && !phoneVal && !trackVal) continue;
+
+    orders.push({
+      id: rawId || `INV-${1000 + i}`,
+      customerName: nameVal || (phoneVal ? `গ্রাহক (${phoneVal.slice(-4)})` : `সম্মানিত গ্রাহক #${i + 1}`),
+      customerPhone: phoneVal,
+      customerAddress: addrVal,
+      product: prodVal,
+      source: sourceVal || 'Website',
+      amount: priceVal,
+      total: priceVal,
+      quantity: qtyVal,
+      status: (statusVal as any) || 'Pending',
+      trackingCode: trackVal || undefined,
+      courierStatus: courierVal || undefined,
+      steadfastStatus: trackVal ? `Sent (${trackVal})` : 'send to steadfast',
+      date: '08/09/26',
+      rowIndex: i + 2, // 1-indexed (row 1 is header)
+    });
+  }
+
+  return { orders, tabName: preferredTab || 'Sheet1' };
+};
+
+/**
+ * Fetch products using Google Sheets public Visualization API
+ */
+export const fetchPublicSheetProducts = async (
+  spreadsheetId: string,
+  preferredTab: string = 'Products'
+): Promise<{ products: Product[]; rawHeader: string[]; tabName: string }> => {
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+  const url = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(preferredTab)}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      return { products: [], rawHeader: [], tabName: preferredTab };
+    }
+    const text = await res.text();
+    const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);/);
+    if (!match || !match[1]) {
+      return { products: [], rawHeader: [], tabName: preferredTab };
+    }
+
+    const data = JSON.parse(match[1]);
+    if (!data.table || !data.table.rows) {
+      return { products: [], rawHeader: [], tabName: preferredTab };
+    }
+
+    const rawCols = data.table.cols.map((c: any) => (c?.label || c?.id || '').trim());
+    const headerRow = rawCols.map(h => h.toLowerCase());
+
+    const idCol = headerRow.findIndex(h => /id|sku|code|কোড|নং/i.test(h));
+    const nameCol = headerRow.findIndex(h => /name|title|product|পণ্য|নাম|item/i.test(h));
+    const regPriceCol = headerRow.findIndex(h => /regular.*price|price|দাম|মূল্য|rate|mrp/i.test(h));
+    const salePriceCol = headerRow.findIndex(h => /sale.*price|offer.*price|discount/i.test(h));
+    const stockCol = headerRow.findIndex(h => /stock|qty|quantity|মজুদ|স্টক/i.test(h));
+    const categoryCol = headerRow.findIndex(h => /category|ক্যাটাগরি|type|group/i.test(h));
+    const descCol = headerRow.findIndex(h => /desc|description|বিবরণ|details/i.test(h));
+    const imageCol = headerRow.findIndex(h => /image|img|photo|ছবি|picture|url/i.test(h));
+
+    const products: Product[] = [];
+    const rawRows = data.table.rows;
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const cells = rawRows[i].c;
+      if (!cells) continue;
+      const row = cells.map((cell: any) =>
+        cell ? (cell.f !== undefined ? String(cell.f).trim() : String(cell.v !== null ? cell.v : '').trim()) : ''
+      );
+
+      if (!row.some((c: string) => c !== '')) continue;
+
+      const rowIndex = i + 2;
+      const rawName = nameCol !== -1 && row[nameCol] ? row[nameCol] : (row[16] || row[7] || row[1] || '');
+      if (!rawName || rawName === 'No Sellect') continue;
+
+      const rawId = idCol !== -1 && row[idCol] ? row[idCol] : `PRD-${rowIndex}`;
+      const regPrice = parseFloat(String(regPriceCol !== -1 ? row[regPriceCol] : row[15] || row[4] || '599').replace(/[^0-9.]/g, '')) || 599;
+      const salePrice = salePriceCol !== -1 && row[salePriceCol] ? parseFloat(String(row[salePriceCol]).replace(/[^0-9.]/g, '')) : undefined;
+      const stock = stockCol !== -1 && row[stockCol] ? parseInt(String(row[stockCol]).replace(/[^0-9]/g, '')) || 10 : 15;
+      const category = categoryCol !== -1 && row[categoryCol] ? row[categoryCol] : 'General';
+      const description = descCol !== -1 && row[descCol] ? row[descCol] : '';
+      const image = imageCol !== -1 && row[imageCol] ? row[imageCol] : '';
+
+      products.push({
+        id: rawId,
+        name: rawName,
+        category,
+        regularPrice: regPrice,
+        salePrice: salePrice && salePrice > 0 && salePrice < regPrice ? salePrice : undefined,
+        stock,
+        status: 'publish',
+        description,
+        image: image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80',
+        rowIndex,
+      });
+    }
+
+    return { products, rawHeader: rawCols, tabName: preferredTab };
+  } catch (err) {
+    console.warn('Public products fetch fallback:', err);
+    return { products: [], rawHeader: [], tabName: preferredTab };
+  }
+};
+
+/**
+ * Fetch orders from user's Google Sheet dynamically detecting columns
  */
 export const getSheetOrders = async (
   spreadsheetId: string,
-  accessToken: string,
+  accessToken?: string | null,
   preferredTab?: string
 ): Promise<{ orders: Order[]; tabName: string }> => {
+  // If no accessToken provided, use public gviz query directly
+  if (!accessToken) {
+    return fetchPublicSheetOrders(spreadsheetId, preferredTab);
+  }
+
   let tabName = preferredTab || 'Sheet1';
   try {
     const meta = await getSpreadsheetMetadata(spreadsheetId, accessToken);
@@ -411,7 +595,8 @@ export const getSheetOrders = async (
       tabName = sheetTitles[0];
     }
   } catch (err) {
-    console.warn('Unable to inspect sheet metadata for orders:', err);
+    console.warn('Unable to inspect sheet metadata for orders, fallback to public fetch:', err);
+    return fetchPublicSheetOrders(spreadsheetId, preferredTab);
   }
 
   try {
@@ -421,10 +606,15 @@ export const getSheetOrders = async (
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
-    if (!res.ok) return { orders: [], tabName };
+    if (!res.ok) {
+      // Fallback to public gviz if OAuth token lacks permission or expired
+      return fetchPublicSheetOrders(spreadsheetId, preferredTab);
+    }
     const data = await res.json();
     const rows: any[][] = data.values || [];
-    if (rows.length <= 1) return { orders: [], tabName };
+    if (rows.length <= 1) {
+      return fetchPublicSheetOrders(spreadsheetId, preferredTab);
+    }
 
     // Find header row: either row 0 or row 1 (as seen in screenshot row 2 has "Invoice ID", "Customer Name", etc.)
     let headerRowIdx = 0;

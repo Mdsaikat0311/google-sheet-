@@ -54,31 +54,6 @@
         }
       }, true);
     </script>
-    <script type="module">
-      // If running on GitHub Pages or static host (not Vite dev server)
-      if (window.location.hostname.includes('github.io') || (!window.location.port && !window.location.hostname.includes('run.app'))) {
-        function loadStaticBundle(base) {
-          var link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = base + 'index.css';
-          link.onerror = function() {
-            if (base === './public/assets/') {
-              loadStaticBundle('./assets/');
-            }
-          };
-          document.head.appendChild(link);
-
-          import(base + 'index.js').catch(function() {
-            if (base === './public/assets/') {
-              import('./assets/index.js').catch(function(e) {
-                console.error('All bundle paths failed:', e);
-              });
-            }
-          });
-        }
-        loadStaticBundle('./public/assets/');
-      }
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

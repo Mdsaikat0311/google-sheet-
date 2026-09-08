@@ -290,11 +290,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     Boolean(order.trackingCode) ||
                     (order.steadfastStatus && order.steadfastStatus.toLowerCase().includes('sent'));
 
-                  const isDropdownOpen = openStatusDropdownId === (order.id || String(idx));
+                  const uniqueKey = `${order.id}-${order.rowIndex ?? idx}`;
+                  const isDropdownOpen = openStatusDropdownId === uniqueKey;
 
                   return (
                     <tr
-                      key={order.id || idx}
+                      key={uniqueKey}
                       className="hover:bg-[#161a26] transition-colors group"
                     >
                       {/* ID Column */}
@@ -347,7 +348,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         <div className="relative inline-block">
                           <button
                             onClick={() =>
-                              setOpenStatusDropdownId(isDropdownOpen ? null : order.id || String(idx))
+                              setOpenStatusDropdownId(isDropdownOpen ? null : uniqueKey)
                             }
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${badge.bg} ${badge.text} ${badge.border}`}
                           >

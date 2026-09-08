@@ -30,10 +30,48 @@ provider.setCustomParameters({
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
+export class AuthDomainError extends Error {
+  code: string;
+  domain: string;
+  constructor(domain: string, code: string = 'auth/unauthorized-domain') {
+    super(`ডোমেইন ${domain} Firebase-এ অনুমোদিত নয়।`);
+    this.name = 'AuthDomainError';
+    this.code = code;
+    this.domain = domain;
+  }
+}
+
+const STORAGE_KEY = 'custom_google_access_token';
+
+export const getSavedManualToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
+};
+
+export const saveManualToken = (token: string) => {
+  cachedAccessToken = token;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, token);
+  }
+};
+
+export const clearManualToken = () => {
+  cachedAccessToken = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
+  }
+};
+
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  const savedToken = getSavedManualToken();
+  if (savedToken) {
+    cachedAccessToken = savedToken;
+  }
+
   if (!auth) {
     if (onAuthFailure) onAuthFailure();
     return () => {};
@@ -41,14 +79,16 @@ export const initAuth = (
 
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
+      const activeToken = cachedAccessToken || savedToken;
+      if (activeToken) {
+        if (onAuthSuccess) onAuthSuccess(user, activeToken);
       } else if (!isSigningIn) {
-        // Token might need re-fetching through popup if page refreshed
         if (onAuthFailure) onAuthFailure();
       }
     } else {
-      cachedAccessToken = null;
+      if (!savedToken) {
+        cachedAccessToken = null;
+      }
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -67,9 +107,20 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    saveManualToken(cachedAccessToken);
     return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Sign in error:', error);
+    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'domain';
+    
+    // Check if error is unauthorized domain or closed popup caused by domain restriction
+    if (
+      error?.code === 'auth/unauthorized-domain' ||
+      (error?.message && error.message.includes('unauthorized-domain')) ||
+      (error?.code === 'auth/popup-closed-by-user' && !currentDomain.includes('localhost') && !currentDomain.includes('run.app'))
+    ) {
+      throw new AuthDomainError(currentDomain, error?.code || 'auth/unauthorized-domain');
+    }
     throw error;
   } finally {
     isSigningIn = false;
@@ -77,16 +128,21 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = (): string | null => {
-  return cachedAccessToken;
+  return cachedAccessToken || getSavedManualToken();
 };
 
 export const setAccessToken = (token: string | null) => {
   cachedAccessToken = token;
+  if (token) {
+    saveManualToken(token);
+  } else {
+    clearManualToken();
+  }
 };
 
 export const logout = async () => {
   if (auth) {
     await signOut(auth);
   }
-  cachedAccessToken = null;
+  clearManualToken();
 };

@@ -13,6 +13,7 @@ import {
   googleSignIn,
   logout,
   setAccessToken,
+  AuthDomainError,
 } from './services/auth';
 import {
   DEFAULT_SPREADSHEET_ID,
@@ -33,6 +34,7 @@ import { NewOrderModal } from './components/NewOrderModal';
 import { ViewOrderModal } from './components/ViewOrderModal';
 import { SheetSettingsModal } from './components/SheetSettingsModal';
 import { CartDrawer } from './components/CartDrawer';
+import { AuthHelpModal } from './components/AuthHelpModal';
 
 export default function App() {
   // Authentication state
@@ -62,6 +64,8 @@ export default function App() {
   const [isSheetSettingsOpen, setIsSheetSettingsOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isAuthHelpOpen, setIsAuthHelpOpen] = useState(false);
+  const [authErrorDomain, setAuthErrorDomain] = useState('');
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
@@ -83,29 +87,25 @@ export default function App() {
         setUser(null);
         setToken(null);
         setAccessToken(null);
+        // Automatically fetch public live orders if not logged in
+        syncWithSheet(spreadsheetId, null);
       }
     );
     return () => unsubscribe();
   }, [spreadsheetId]);
 
-  // 2. Fetch live data from Google Sheets
+  // 2. Fetch live data from Google Sheets (works with or without token)
   const syncWithSheet = async (targetId = spreadsheetId, token = accessToken) => {
-    if (!token) {
-      showToast('গুগল শিট থেকে ডাটা রিফ্রেশ করতে Google Sign-In করুন।', 'error');
-      setIsSheetSettingsOpen(true);
-      return;
-    }
-
     setIsSyncing(true);
     try {
-      // Fetch Orders
+      // Fetch Orders: works with OAuth token or via Public Visualization API
       const { orders: sheetOrders, tabName } = await getSheetOrders(targetId, token);
       if (sheetOrders && sheetOrders.length > 0) {
         setOrders(sheetOrders);
         setOrderSheetTab(tabName);
-        showToast(`গুগল শিট থেকে ${sheetOrders.length} টি অর্ডার সফলভাবে লোড হয়েছে!`);
+        showToast(`গুগল শিট থেকে ${sheetOrders.length} টি লাইভ অর্ডার লোড হয়েছে!`);
       } else {
-        showToast('শিট কানেক্ট হয়েছে। নতুন অর্ডার যুক্ত করতে পারেন।');
+        showToast('শিটের সাথে যোগাযোগ সম্পন্ন হয়েছে।');
       }
 
       // Fetch Products for storefront
@@ -129,17 +129,33 @@ export default function App() {
   const handleGoogleSignIn = async () => {
     setIsAuthLoading(true);
     try {
-      const { user: signedInUser, accessToken: token } = await googleSignIn();
-      setUser(signedInUser);
-      setToken(token);
-      setAccessToken(token);
-      showToast(`${signedInUser.displayName || 'ব্যবহারকারী'} গুগল অ্যাকাউন্টে সংযুক্ত হয়েছেন!`);
-      if (token) {
-        await syncWithSheet(spreadsheetId, token);
+      const res = await googleSignIn();
+      if (res) {
+        const { user: signedInUser, accessToken: token } = res;
+        setUser(signedInUser);
+        setToken(token);
+        setAccessToken(token);
+        showToast(`${signedInUser.displayName || 'ব্যবহারকারী'} গুগল অ্যাকাউন্টে সংযুক্ত হয়েছেন!`);
+        if (token) {
+          await syncWithSheet(spreadsheetId, token);
+        }
       }
     } catch (err: any) {
       console.error('Sign-in error:', err);
-      showToast(err.message || 'গুগল সাইন-ইন ব্যর্থ হয়েছে', 'error');
+      const curDomain = typeof window !== 'undefined' ? window.location.hostname : 'domain';
+      if (
+        err instanceof AuthDomainError ||
+        err?.code === 'auth/unauthorized-domain' ||
+        (err?.message && err.message.includes('অনুমোদিত')) ||
+        (err?.code === 'auth/popup-closed-by-user' && !curDomain.includes('localhost') && !curDomain.includes('run.app'))
+      ) {
+        setAuthErrorDomain(curDomain);
+        setIsAuthHelpOpen(true);
+      } else if (err?.code === 'auth/popup-closed-by-user') {
+        showToast('লগইন পপ-আপ উইন্ডো বন্ধ করা হয়েছে।', 'error');
+      } else {
+        showToast(err.message || 'গুগল সাইন-ইন ব্যর্থ হয়েছে', 'error');
+      }
     } finally {
       setIsAuthLoading(false);
     }
@@ -463,6 +479,27 @@ export default function App() {
         isAuthLoading={isAuthLoading}
         onSyncNow={() => syncWithSheet()}
         isSyncing={isSyncing}
+        onOpenAuthHelp={() => {
+          setAuthErrorDomain(typeof window !== 'undefined' ? window.location.hostname : '');
+          setIsAuthHelpOpen(true);
+        }}
+      />
+
+      {/* Google Sign-in Help & Domain Modal */}
+      <AuthHelpModal
+        isOpen={isAuthHelpOpen}
+        onClose={() => setIsAuthHelpOpen(false)}
+        domain={authErrorDomain || (typeof window !== 'undefined' ? window.location.hostname : '')}
+        onUsePublicMode={() => {
+          syncWithSheet(spreadsheetId, null);
+          showToast('পাবলিক শিট মোডে লাইভ ডাটা সিঙ্ক হচ্ছে...');
+        }}
+        onSaveManualToken={(token) => {
+          setToken(token);
+          setAccessToken(token);
+          syncWithSheet(spreadsheetId, token);
+          showToast('ম্যানুয়াল টোকেন সংরক্ষণ করা হয়েছে এবং শিট সিঙ্ক হচ্ছে!');
+        }}
       />
 
       {/* Shopping Cart Drawer */}

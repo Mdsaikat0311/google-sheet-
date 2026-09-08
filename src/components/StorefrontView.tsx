@@ -81,9 +81,9 @@ export const StorefrontView: React.FC<StorefrontViewProps> = ({
 
       {/* Product Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {filtered.map((prod) => (
+        {filtered.map((prod, idx) => (
           <div
-            key={prod.id}
+            key={`${prod.id}-${prod.rowIndex ?? idx}`}
             className="bg-[#12151f] border border-[#1e2436] rounded-2xl overflow-hidden hover:border-pink-500/40 transition-all flex flex-col justify-between group"
           >
             <div>
