@@ -42,19 +42,55 @@
         var errBox = document.getElementById('loader-error');
         if (!errBox) return;
         var src = (ev.target && (ev.target.src || ev.target.href)) || '';
-        // Only show fatal errors, ignore intermediate fallback probes
-        if (ev.target && (ev.target.tagName === 'SCRIPT' || ev.target.tagName === 'LINK')) {
-          if (src.includes('public/assets')) {
-            errBox.style.display = 'block';
-            errBox.innerHTML = '<strong>ফাইল লোড হতে সমস্যা হয়েছে:</strong><br>' + src;
-          }
-        } else if (ev.message && !ev.message.includes('ResizeObserver')) {
+        if (src.includes('main.tsx')) {
+          // /src/main.tsx failed to load on static host, this is expected and fallback will handle it
+          return;
+        }
+        if (ev.message && !ev.message.includes('ResizeObserver') && !ev.message.includes('main.tsx')) {
           errBox.style.display = 'block';
           errBox.innerText = 'Error: ' + ev.message;
         }
       }, true);
     </script>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Resilient fallback for static hosting (e.g. GitHub Pages) where /src/main.tsx is not available
+      window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+          var root = document.getElementById('root');
+          if (root && root.querySelector('h2') && root.querySelector('h2').textContent.includes('লোড')) {
+            console.log('Static host detected without Vite server, loading pre-compiled bundle...');
+            
+            // 1. Load compiled stylesheet
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = './assets/index.css';
+            document.head.appendChild(link);
+
+            // 2. Load compiled JS bundle
+            var script = document.createElement('script');
+            script.type = 'module';
+            script.crossOrigin = 'anonymous';
+            script.src = './assets/index.js';
+            script.onerror = function() {
+              var s2 = document.createElement('script');
+              s2.type = 'module';
+              s2.crossOrigin = 'anonymous';
+              s2.src = './dist/assets/index.js';
+              s2.onerror = function(err) {
+                var errBox = document.getElementById('loader-error');
+                if (errBox) {
+                  errBox.style.display = 'block';
+                  errBox.innerHTML = 'অ্যাসেট লোড করতে ব্যর্থ হয়েছে। দয়া করে আপনার GitHub Pages Settings-এ Source হিসেবে <strong>/docs</strong> নির্বাচন করুন।';
+                }
+              };
+              document.body.appendChild(s2);
+            };
+            document.body.appendChild(script);
+          }
+        }, 1200);
+      });
+    </script>
   </body>
 </html>
 
