@@ -12,6 +12,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // 1. Ensure trailing slash on GitHub Pages so relative URLs resolve to repository directory
+      (function() {
+        var p = window.location.pathname;
+        if (p && !p.endsWith('/') && !p.split('/').pop().includes('.')) {
+          window.location.replace(window.location.origin + p + '/' + window.location.search + window.location.hash);
+        }
+      })();
+    </script>
   </head>
   <body style="margin: 0; background-color: #0a0c13; color: #f3f4f6;">
     <div id="root">
@@ -20,7 +29,7 @@
           <div style="width: 44px; height: 44px; border: 3px solid rgba(236, 72, 153, 0.2); border-top-color: #ec4899; border-radius: 50%; margin: 0 auto 16px auto; animation: spin 1s linear infinite;"></div>
           <h2 style="font-size: 17px; font-weight: 600; margin: 0 0 8px 0; color: #ffffff;">মাই ব্যবসা ড্যাশবোর্ড লোড হচ্ছে...</h2>
           <p style="font-size: 13px; color: #9ca3af; margin: 0; line-height: 1.5;">অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন...</p>
-          <div id="loader-error" style="display: none; margin-top: 14px; padding: 10px; border-radius: 8px; background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); color: #fda4af; font-size: 11px; text-align: left; font-family: monospace; word-break: break-all;"></div>
+          <div id="loader-error" style="display: none; margin-top: 14px; padding: 12px; border-radius: 8px; background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); color: #fda4af; font-size: 12px; text-align: left; font-family: monospace; word-break: break-all; line-height: 1.4;"></div>
         </div>
       </div>
     </div>
@@ -28,27 +37,32 @@
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
     <script>
-      // Catch errors and show them on screen for instant diagnosis
+      // Diagnostic error catcher
       window.addEventListener('error', function(ev) {
         var errBox = document.getElementById('loader-error');
-        if (errBox && ev.message && !ev.message.includes('ResizeObserver')) {
+        if (!errBox) return;
+        if (ev.target && (ev.target.tagName === 'SCRIPT' || ev.target.tagName === 'LINK')) {
+          errBox.style.display = 'block';
+          var failedUrl = ev.target.src || ev.target.href || '';
+          errBox.innerHTML = '<strong>ফাইল লোড হতে সমস্যা হয়েছে:</strong><br>' + failedUrl;
+        } else if (ev.message && !ev.message.includes('ResizeObserver')) {
           errBox.style.display = 'block';
           errBox.innerText = 'Error: ' + ev.message;
         }
-        // If main.tsx failed to load on static hosting, load pre-compiled bundle
-        if (ev.target && ev.target.src && ev.target.src.includes('main.tsx')) {
-          var link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = './assets/index.css';
-          document.head.appendChild(link);
-
-          var script = document.createElement('script');
-          script.type = 'module';
-          script.crossOrigin = 'anonymous';
-          script.src = './assets/index.js';
-          document.body.appendChild(script);
-        }
       }, true);
+    </script>
+    <script type="module">
+      // If running on GitHub Pages or static host (not Vite dev server)
+      if (window.location.hostname.includes('github.io') || (!window.location.port && !window.location.hostname.includes('run.app'))) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = './assets/index.css';
+        document.head.appendChild(link);
+
+        import('./assets/index.js').catch(function(err) {
+          console.error('Failed to import bundle:', err);
+        });
+      }
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
