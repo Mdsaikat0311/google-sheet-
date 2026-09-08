@@ -1,6 +1,6 @@
 {
   "name": "মাই ব্যবসা ড্যাশবোর্ড",
-  "description": "",
+  "description": "ই-কমার্স অর্ডার ম্যানেজমেন্ট, কুরিয়ার ট্র্যাকিং এবং গুগল শিট অটোমেশন ড্যাশবোর্ড।",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
