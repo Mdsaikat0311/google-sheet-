@@ -26,17 +26,6 @@
     <style>
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
-    <script>
-      // Fallback redirect if GitHub Pages serves root index.html instead of docs/
-      if (window.location.hostname.includes('github.io') && !window.location.pathname.includes('/docs')) {
-        setTimeout(function() {
-          var root = document.getElementById('root');
-          if (root && root.querySelector('style, h2')) {
-            window.location.href = './docs/';
-          }
-        }, 1500);
-      }
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
